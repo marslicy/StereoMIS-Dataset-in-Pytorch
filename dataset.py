@@ -5,12 +5,13 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from utils.flow import RAFT
 from utils.rectification import StereoRectifier
 from utils.utils import mask_specularities, tq2RT
 
 
 class StereoMISDataset(Dataset):
-    def __init__(self, data_path, split, depth_cutoff=300, size=None):
+    def __init__(self, data_path, split, depth_map=True, depth_cutoff=300, size=None):
         # depth_cutoff: assume the maximum depth is 300mm
         assert split in [
             "train",
@@ -22,6 +23,9 @@ class StereoMISDataset(Dataset):
         self.size = size
         self.split = split
         self.depth_cutoff = depth_cutoff
+        self.depth_map = depth_map
+        if self.depth_map:
+            self.flow = RAFT()
 
         # load sequences
         self.sequences = [
@@ -195,15 +199,24 @@ class StereoMISDataset(Dataset):
         intrinsics = (
             self.calibration[seq].calib["intrinsics"]["left"].astype(np.float32)
         )
-        baseline = self.calibration[seq].calib["bf"].astype(np.float32) / self.depth_cutoff
+        baseline = (
+            self.calibration[seq].calib["bf"].astype(np.float32) / self.depth_cutoff
+        )
+
+        framel = torch.stack([framel1, framel2], dim=0)
+        framer = torch.stack([framer1, framer2], dim=0)
+        if self.depth_map:
+            depth = self.flow.depth_estimation(framel, framer, baseline)
 
         # Return the sample as a dictionary
         return {
             "framel1": framel1,
             "framer1": framer1,
+            "depth1": depth[0],
             "mask1": mask1,
             "framel2": framel2,
             "framer2": framer2,
+            "depth2": depth[1],
             "mask2": mask2,
             "pose": pose,
             "intrinsics": intrinsics,
@@ -218,11 +231,11 @@ if __name__ == "__main__":
     data_path = "StereoMIS_0_0_1"
     # Example usage
     dataset = StereoMISDataset(
-        data_path=data_path, split="test", size=(1280 // 2, 1024 // 2)
+        data_path=data_path, split="test", size=(1280 // 4, 1024 // 4)
     )
     print(f"Dataset size: {len(dataset)}")
     dataloader = DataLoader(
-        dataset, batch_size=8, shuffle=False, num_workers=0, drop_last=False
+        dataset, batch_size=2, shuffle=True, num_workers=0, drop_last=False
     )
     print(f"DataLoader size: {len(dataloader)}")
     # Iterate through the dataset
@@ -230,21 +243,26 @@ if __name__ == "__main__":
         print(f"Sample {i}:")
         print(sample["framel1"].shape)  # (B, 3, H, W)
         print(sample["framer1"].shape)  # (B, 3, H, W)
+        print(sample["depth1"].shape)  # (B, H, W)
         print(sample["mask1"].shape)  # (B, H, W)
         print(sample["framel2"].shape)  # (B, 3, H, W)
         print(sample["framer2"].shape)  # (B, 3, H, W)
+        print(sample["depth2"].shape)  # (B, H, W)
         print(sample["mask2"].shape)  # (B, H, W)
-        print(sample["pose"].shape) # (B, 4, 4)
+        print(sample["pose"].shape)  # (B, 4, 4)
         print(sample["intrinsics"].shape)  # (B, 3, 3)
         print(sample["baseline"].shape)  # (B, )
 
-        # visualize framel1 and mask1
         framel1_np = sample["framel1"][0].permute(1, 2, 0).numpy()  # Convert to HWC
         mask1_np = sample["mask1"][0].numpy().astype(np.uint8)
 
         framel1_np = (framel1_np * 0.5 + 0.5) * 255.0  # Convert back to [0, 255]
         framel1_np = framel1_np.astype(np.uint8)
 
+        depth1_np = sample["depth1"][0].numpy()
+        depth1_np = (depth1_np * 255.0).astype(np.uint8)
+
         cv2.imwrite("framel.png", framel1_np)
         cv2.imwrite("mask.png", mask1_np * 255)
+        cv2.imwrite("depth.png", depth1_np)
         break

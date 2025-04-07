@@ -22,6 +22,7 @@ def mask_specularities(img, mask=None, spec_thr=0.96):
     mask = cv2.erode(mask.astype(np.uint8), kernel=np.ones((11, 11)))
     return mask
 
+
 def tq2RT(pose_tq, depth_cutoff=1):
     """
     Converts a pose represented by translation and quaternion to a 4x4 transformation matrix.
