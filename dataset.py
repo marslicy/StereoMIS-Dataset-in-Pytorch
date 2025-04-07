@@ -154,12 +154,16 @@ class StereoMISDataset(Dataset):
         mask = cv2.resize(mask, self.size) if self.size is not None else mask
         mask = mask > 0
         mask = mask_specularities(framel, mask)
-        cv2.imwrite("mask.png", mask * 255)
-        cv2.imwrite("framel.png", framel)
 
         framel = torch.from_numpy(framel).permute(2, 0, 1)  # HWC to CHW
         framer = torch.from_numpy(framer).permute(2, 0, 1)  # HWC to CHW
         mask = torch.from_numpy(mask)
+
+        # normalize the frames
+        framel = framel.float() / 255.0  # Normalize to [0, 1]
+        framer = framer.float() / 255.0  # Normalize to [0, 1]
+        framel = (framel - 0.5) / 0.5  # Normalize to [-1, 1]
+        framer = (framer - 0.5) / 0.5  # Normalize to [-1, 1]
 
         return framel, framer, mask
 
@@ -233,4 +237,14 @@ if __name__ == "__main__":
         print(sample["pose"].shape) # (B, 4, 4)
         print(sample["intrinsics"].shape)  # (B, 3, 3)
         print(sample["baseline"].shape)  # (B, )
+
+        # visualize framel1 and mask1
+        framel1_np = sample["framel1"][0].permute(1, 2, 0).numpy()  # Convert to HWC
+        mask1_np = sample["mask1"][0].numpy().astype(np.uint8)
+
+        framel1_np = (framel1_np * 0.5 + 0.5) * 255.0  # Convert back to [0, 255]
+        framel1_np = framel1_np.astype(np.uint8)
+
+        cv2.imwrite("framel.png", framel1_np)
+        cv2.imwrite("mask.png", mask1_np * 255)
         break
