@@ -6,7 +6,6 @@ from typing import Tuple
 
 import cv2
 import numpy as np
-import torch
 
 
 def get_rect_maps(
@@ -151,8 +150,6 @@ class StereoRectifier(object):
         self.calib = self.get_rectified_calib()
 
     def __call__(self, img_left, img_right):
-        img_left = img_left.permute(1, 2, 0).numpy()
-        img_right = img_right.permute(1, 2, 0).numpy()
         if self.mode == "pseudo":
             x0, x1, y0, y1 = (
                 self.cal["lkmat"][0][-1],
@@ -164,8 +161,6 @@ class StereoRectifier(object):
             img_left_rect = img_left
         else:
             img_left_rect, img_right_rect = rectify_pair(img_left, img_right, self.maps)
-        img_left_rect = torch.tensor(img_left_rect).permute(2, 0, 1)
-        img_right_rect = torch.tensor(img_right_rect).permute(2, 0, 1)
         return img_left_rect, img_right_rect
 
     def get_rectified_calib(self):

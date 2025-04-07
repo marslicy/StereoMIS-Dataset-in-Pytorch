@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+
 from utils.rectification import StereoRectifier
+from utils.utils import mask_specularities
 
 
 class StereoMISDataset(Dataset):
@@ -39,9 +41,7 @@ class StereoMISDataset(Dataset):
     def set_path_calib_index(self):
         # read sequencest.txt as a diction
         stride_dict = {}
-        with open(
-            os.path.join(self.data_path, "sequences.txt"), "r"
-        ) as f:
+        with open(os.path.join(self.data_path, "sequences.txt"), "r") as f:
             lines = f.readlines()[1:]  # Ignore the first line
             for line in lines:
                 line = line.strip().split(",")
@@ -66,7 +66,7 @@ class StereoMISDataset(Dataset):
                 raise FileNotFoundError(
                     f"No mp4 file found in {os.path.join(self.data_path, seq)}"
                 )
-            
+
             # load stereo calibration
             ini_path = os.path.join(self.data_path, seq, "StereoCalibration.ini")
             if os.path.exists(ini_path):
@@ -127,12 +127,6 @@ class StereoMISDataset(Dataset):
         return sum(num_frames for _, _, num_frames, _ in self.frame_indexes)
 
     def load_sample(self, seq, idx, video_path):
-        # load mask
-        mask_path = os.path.join(self.data_path, seq, f"masks/{idx:06d}l.png")
-        mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-        mask = cv2.resize(mask, self.size) if self.size is not None else mask
-        mask = torch.from_numpy(mask).unsqueeze(0)
-
         # load the video
         cv2_video = cv2.VideoCapture(video_path)
         cv2_video.set(cv2.CAP_PROP_POS_FRAMES, idx)
@@ -149,11 +143,21 @@ class StereoMISDataset(Dataset):
             framel = cv2.resize(framel, self.size)
             framer = cv2.resize(framer, self.size)
 
+        # rectify the frame
+        framel, framer = self.calibration[seq](framel, framer)  # in shape of [H, W, 3]
+
+        # load mask
+        mask_path = os.path.join(self.data_path, seq, f"masks/{idx:06d}l.png")
+        mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+        mask = cv2.resize(mask, self.size) if self.size is not None else mask
+        mask = mask > 0
+        mask = mask_specularities(framel, mask)
+        cv2.imwrite("mask.png", mask * 255)
+        cv2.imwrite("framel.png", framel)
+
         framel = torch.from_numpy(framel).permute(2, 0, 1)  # HWC to CHW
         framer = torch.from_numpy(framer).permute(2, 0, 1)  # HWC to CHW
-
-        # rectify the frame
-        framel, framer = self.calibration[seq](framel, framer)  # in shape of [3, H, W]
+        mask = torch.from_numpy(mask)
 
         return framel, framer, mask
 
@@ -196,13 +200,30 @@ class StereoMISDataset(Dataset):
 
 
 if __name__ == "__main__":
-    data_path = "/mnt/cluster/workspaces/chenyang/StereoMIS_0_0_1"
+    # import dataloader
+    from torch.utils.data import DataLoader
+
+    data_path = "StereoMIS_0_0_1"
     # Example usage
     dataset = StereoMISDataset(
         data_path=data_path, split="test", size=(1280 // 2, 1024 // 2)
     )
     print(f"Dataset size: {len(dataset)}")
-    for _ in range(10):
-        sample = dataset[np.random.randint(0, len(dataset) - 1)]
-    sample = dataset[len(dataset) - 1]
-    sample = dataset[0]
+    dataloader = DataLoader(
+        dataset, batch_size=8, shuffle=False, num_workers=0, drop_last=False
+    )
+    print(f"DataLoader size: {len(dataloader)}")
+    # Iterate through the dataset
+    for i, sample in enumerate(dataloader):
+        print(f"Sample {i}:")
+        print(sample["framel1"].shape)  # (B, 3, H, W)
+        print(sample["framer1"].shape)  # (B, 3, H, W)
+        print(sample["mask1"].shape)  # (B, H, W)
+        print(sample["framel2"].shape)  # (B, 3, H, W)
+        print(sample["framer2"].shape)  # (B, 3, H, W)
+        print(sample["mask2"].shape)  # (B, H, W)
+        print(sample["pose1"].shape)
+        print(sample["pose2"].shape)
+        print(sample["intrinsics"].shape)  # (B, 3, 3)
+        print(sample["baseline"].shape)  # (B, )
+        break
