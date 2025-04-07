@@ -10,10 +10,14 @@ Without any preprocessing of the data, you can use the pytorch dataset provided 
 
 ## Prepare the Python Environment
 
-I tried to avoid any non-common packages when writing the code. 
+I tried to avoid any non-common packages when writing the code.
 
 Create a python environment with
 
 - PyTorch
 - Torchvision
-- opencv-python
+- opencv-python`
+
+## Acknowledgement
+
+Code is adapted from https://github.com/aimi-lab/robust-pose-estimator
