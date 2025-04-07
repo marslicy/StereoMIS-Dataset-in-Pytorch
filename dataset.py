@@ -6,11 +6,12 @@ import torch
 from torch.utils.data import Dataset
 
 from utils.rectification import StereoRectifier
-from utils.utils import mask_specularities
+from utils.utils import mask_specularities, tq2RT
 
 
 class StereoMISDataset(Dataset):
-    def __init__(self, data_path, split, size=None):
+    def __init__(self, data_path, split, depth_cutoff=300, size=None):
+        # depth_cutoff: assume the maximum depth is 300mm
         assert split in [
             "train",
             "test",
@@ -20,6 +21,7 @@ class StereoMISDataset(Dataset):
         self.data_path = data_path
         self.size = size
         self.split = split
+        self.depth_cutoff = depth_cutoff
 
         # load sequences
         self.sequences = [
@@ -103,14 +105,14 @@ class StereoMISDataset(Dataset):
                 with open(pose_path, "r") as f:
                     data = f.read()
                     lines = data.replace(",", " ").replace("\t", " ").split("\n")
-                    list = [
+                    l = [
                         [v.strip() for v in line.split(" ") if v.strip() != ""]
                         for line in lines
                         if len(line) > 0 and line[0] != "#"
                     ]
 
                     pose_tq = np.array(
-                        [[float(v) for v in l[1:]] for l in list if len(l) > 0],
+                        [[float(v) for v in l[1:]] for l in l if len(l) > 0],
                         dtype=float,
                     )
                     pose_tq = torch.from_numpy(pose_tq)
@@ -179,10 +181,17 @@ class StereoMISDataset(Dataset):
         pose1 = self.pose[seq][idx]
         pose2 = self.pose[seq][idx + stride]
 
+        pose1_RT = tq2RT(pose1, self.depth_cutoff)
+        pose2_RT = tq2RT(pose2, self.depth_cutoff)
+
+        # calculate relative pose
+        pose = np.linalg.inv(pose1_RT) @ pose2_RT
+        pose = torch.from_numpy(pose)
+
         intrinsics = (
             self.calibration[seq].calib["intrinsics"]["left"].astype(np.float32)
         )
-        baseline = self.calibration[seq].calib["bf"].astype(np.float32)
+        baseline = self.calibration[seq].calib["bf"].astype(np.float32) / self.depth_cutoff
 
         # Return the sample as a dictionary
         return {
@@ -192,8 +201,7 @@ class StereoMISDataset(Dataset):
             "framel2": framel2,
             "framer2": framer2,
             "mask2": mask2,
-            "pose1": pose1,
-            "pose2": pose2,
+            "pose": pose,
             "intrinsics": intrinsics,
             "baseline": baseline,
         }
@@ -222,8 +230,7 @@ if __name__ == "__main__":
         print(sample["framel2"].shape)  # (B, 3, H, W)
         print(sample["framer2"].shape)  # (B, 3, H, W)
         print(sample["mask2"].shape)  # (B, H, W)
-        print(sample["pose1"].shape)
-        print(sample["pose2"].shape)
+        print(sample["pose"].shape) # (B, 4, 4)
         print(sample["intrinsics"].shape)  # (B, 3, 3)
         print(sample["baseline"].shape)  # (B, )
         break
