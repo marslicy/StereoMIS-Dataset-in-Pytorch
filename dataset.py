@@ -96,7 +96,7 @@ class StereoMISDataset(Dataset):
                                 seq,
                                 int(frame_index[0]),
                                 (int(frame_index[1]) - int(frame_index[0])) // stride
-                                - 1,
+                                - 1,# I guess should be +1 ?
                                 stride,
                             )
                         )
@@ -228,7 +228,8 @@ if __name__ == "__main__":
     # import dataloader
     from torch.utils.data import DataLoader
 
-    data_path = "StereoMIS_0_0_1"
+    # data_path = "StereoMIS_0_0_1"
+    data_path = '/mnt/cluster/datasets/StereoMIS_0_0_1/'
     # Example usage
     dataset = StereoMISDataset(
         data_path=data_path, split="test", size=(1280 // 4, 1024 // 4)
