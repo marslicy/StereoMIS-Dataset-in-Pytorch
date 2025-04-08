@@ -37,7 +37,7 @@ class StereoMISDataset(Dataset):
 
         self.video_paths = {}  # dictionary to store video paths
         self.calibration = {}  # dictionary to store calibration objects
-        self.frame_indexes = []  # list of tuples (seq, start_frame, num_frames, stride)
+        self.frame_indexes = []  # list of tuples (seq, start_frame, num_frames, stride) #test PR
         self.set_path_calib_index()
         # print(self.frame_indexes)
 
