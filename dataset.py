@@ -166,7 +166,7 @@ class StereoMISDataset(Dataset):
         # normalize the frames
         framel = framel.float() / 255.0  # Normalize to [0, 1]
         framer = framer.float() / 255.0  # Normalize to [0, 1]
-        framel = (framel - 0.5) / 0.5  # Normalize to [-1, 1]
+        framel = (framel - 0.5) / 0.5  # Normalize to [-1, 1] # I think usually normalize to [0,1]? Not sure why normalize to [-1, 1] here?
         framer = (framer - 0.5) / 0.5  # Normalize to [-1, 1]
 
         return framel, framer, mask
