@@ -1,0 +1,3 @@
+[submodule "utils/stereoanywhere"]
+	path = utils/stereoanywhere
+	url = https://github.com/bartn8/stereoanywhere.git

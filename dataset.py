@@ -5,18 +5,32 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from utils.flow import RAFT
+from utils.flow import RAFT, StereoAntwhere
 from utils.rectification import StereoRectifier
 from utils.utils import mask_specularities, tq2RT
 
 
 class StereoMISDataset(Dataset):
-    def __init__(self, data_path, split, depth_map=True, depth_cutoff=300, size=None):
+    def __init__(
+        self,
+        data_path,
+        split,
+        depth_map=None,
+        depth_cutoff=300,
+        size=None,
+        device="cuda",
+    ):
         # depth_cutoff: assume the maximum depth is 300mm
         assert split in [
             "train",
             "test",
         ], "Split must be one of ['train', 'test']"
+
+        assert depth_map in [
+            None,
+            "raft",
+            "stereoanywhere",
+        ], "depth_map must be one of [None, 'raft', 'stereoanywhere']"
 
         super().__init__()
         self.data_path = data_path
@@ -25,7 +39,16 @@ class StereoMISDataset(Dataset):
         self.depth_cutoff = depth_cutoff
         self.depth_map = depth_map
         if self.depth_map:
-            self.flow = RAFT()
+            if self.depth_map == "raft":
+                # load raft model
+                self.flow = RAFT(device=device)
+            elif self.depth_map == "stereoanywhere":
+                # load stereoanywhere model
+                self.flow = StereoAntwhere(mono_model="base", device=device)
+            else:
+                raise ValueError(
+                    "depth_map must be one of [None, 'raft', 'stereoanywhere']"
+                )
 
         # load sequences
         self.sequences = [
@@ -163,12 +186,6 @@ class StereoMISDataset(Dataset):
         framer = torch.from_numpy(framer).permute(2, 0, 1)  # HWC to CHW
         mask = torch.from_numpy(mask)
 
-        # normalize the frames
-        framel = framel.float() / 255.0  # Normalize to [0, 1]
-        framer = framer.float() / 255.0  # Normalize to [0, 1]
-        framel = (framel - 0.5) / 0.5  # Normalize to [-1, 1]
-        framer = (framer - 0.5) / 0.5  # Normalize to [-1, 1]
-
         return framel, framer, mask
 
     def __getitem__(self, idx):
@@ -208,6 +225,16 @@ class StereoMISDataset(Dataset):
         if self.depth_map:
             depth = self.flow.depth_estimation(framel, framer, baseline)
 
+        # normalize the frames
+        framel = framel.float() / 255.0  # Normalize to [0, 1]
+        framer = framer.float() / 255.0  # Normalize to [0, 1]
+        framel = (framel - 0.5) / 0.5  # Normalize to [-1, 1]
+        framer = (framer - 0.5) / 0.5  # Normalize to [-1, 1]
+        framel1 = framel[0]
+        framer1 = framer[0]
+        framel2 = framel[1]
+        framer2 = framer[1]
+
         # Return the sample as a dictionary
         return {
             "framel1": framel1,
@@ -228,14 +255,22 @@ if __name__ == "__main__":
     # import dataloader
     from torch.utils.data import DataLoader
 
-    data_path = "StereoMIS_0_0_1"
+    data_path = "/mnt/cluster/datasets/StereoMIS_0_0_1"
+
+    # depth_map="raft"
+    depth_map = "stereoanywhere"
+    # depth_map=None
+
     # Example usage
     dataset = StereoMISDataset(
-        data_path=data_path, split="test", size=(1280 // 4, 1024 // 4)
+        data_path=data_path,
+        split="test",
+        depth_map=depth_map,
+        size=(1280 // 4, 1024 // 4),
     )
     print(f"Dataset size: {len(dataset)}")
     dataloader = DataLoader(
-        dataset, batch_size=2, shuffle=True, num_workers=0, drop_last=False
+        dataset, batch_size=2, shuffle=False, num_workers=0, drop_last=False
     )
     print(f"DataLoader size: {len(dataloader)}")
     # Iterate through the dataset
@@ -260,6 +295,8 @@ if __name__ == "__main__":
         framel1_np = framel1_np.astype(np.uint8)
 
         depth1_np = sample["depth1"][0].numpy()
+        # normalize depth to [0, 1] to see details
+        depth1_np = (depth1_np - depth1_np.min()) / (depth1_np.max() - depth1_np.min())
         depth1_np = (depth1_np * 255.0).astype(np.uint8)
 
         cv2.imwrite("framel.png", framel1_np)
