@@ -146,11 +146,5 @@ class StereoAntwhere:
             test_mode=True,
         )
 
-        plt.imsave(
-            "disp.png",
-            pred_disps[0, 0].detach().cpu().numpy(),
-            cmap="gray",
-        )
-
         # flow in the shape of (B, 1, H, W)
         return pred_disps.detach().cpu()

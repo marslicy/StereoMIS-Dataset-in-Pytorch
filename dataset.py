@@ -45,10 +45,6 @@ class StereoMISDataset(Dataset):
             elif self.depth_map == "stereoanywhere":
                 # load stereoanywhere model
                 self.flow = StereoAntwhere(mono_model="base", device=device)
-            else:
-                raise ValueError(
-                    "depth_map must be one of [None, 'raft', 'stereoanywhere']"
-                )
 
         # load sequences
         self.sequences = [
