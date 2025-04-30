@@ -16,6 +16,7 @@ Create a python environment with
 - torchvision
 - opencv-python
 - scipy
+- decord
 
 Then you are ready to run `dataset.py`
 

@@ -1,8 +1,10 @@
 import os
+import time
 
 import cv2
 import numpy as np
 import torch
+from decord import VideoReader, cpu
 from torch.utils.data import Dataset
 
 from utils.flow import RAFT, StereoAntwhere
@@ -58,6 +60,7 @@ class StereoMISDataset(Dataset):
         self.video_paths = {}  # dictionary to store video paths
         self.calibration = {}  # dictionary to store calibration objects
         self.frame_indexes = []  # list of tuples (seq, start_frame, num_frames, stride)
+        self.vr = {}  # dictionary to store video readers
         self.set_path_calib_index()
 
         self.pose = {}
@@ -121,6 +124,9 @@ class StereoMISDataset(Dataset):
                     f"No StereoCalibration.ini file found in {os.path.join(self.data_path, seq)}"
                 )
 
+            if seq not in self.vr:
+                self.vr[seq] = VideoReader(self.video_paths[seq], ctx=cpu(0))
+
     def load_pose(self):
         for seq in self.sequences:
             # find the pose file
@@ -153,12 +159,12 @@ class StereoMISDataset(Dataset):
         return sum(num_frames for _, _, num_frames, _ in self.frame_indexes)
 
     def load_sample(self, seq, idx, video_path):
-        # load the video
-        cv2_video = cv2.VideoCapture(video_path)
-        cv2_video.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ret, frame = cv2_video.read()
-        if not ret:
-            raise RuntimeError(f"Failed to read frame {idx} from video {video_path}")
+        # load the video using VideoReader
+        time_start = time.time()
+        vr = self.vr[seq]
+        frame = vr[idx].asnumpy()
+        time_end = time.time()
+        print(f"Load video {video_path} frame {idx} time: {time_end - time_start:.4f}s")
 
         # upper side is the left frame, lower side is the right frame
         framel = frame[: frame.shape[0] // 2]
@@ -261,13 +267,13 @@ if __name__ == "__main__":
     # Example usage
     dataset = StereoMISDataset(
         data_path=data_path,
-        split="test",
+        split="train",
         depth_map=depth_map,
         size=(1280 // 4, 1024 // 4),
     )
     print(f"Dataset size: {len(dataset)}")
     dataloader = DataLoader(
-        dataset, batch_size=2, shuffle=False, num_workers=0, drop_last=False
+        dataset, batch_size=2, shuffle=True, num_workers=0, drop_last=False
     )
     print(f"DataLoader size: {len(dataloader)}")
     # Iterate through the dataset
