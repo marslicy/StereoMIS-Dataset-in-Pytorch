@@ -46,7 +46,7 @@ class StereoMISDataset(Dataset):
                 # load stereoanywhere model
                 self.flow = StereoAntwhere(mono_model="base", device=device)
 
-        # load sequences
+        # load all sequences
         self.sequences = [
             seq
             for seq in os.listdir(data_path)
@@ -54,11 +54,11 @@ class StereoMISDataset(Dataset):
         ]
         self.sequences.sort()
 
+        # only save paths for sequences in the split
         self.video_paths = {}  # dictionary to store video paths
         self.calibration = {}  # dictionary to store calibration objects
         self.frame_indexes = []  # list of tuples (seq, start_frame, num_frames, stride)
         self.set_path_calib_index()
-        # print(self.frame_indexes)
 
         self.pose = {}
         self.load_pose()
@@ -81,6 +81,24 @@ class StereoMISDataset(Dataset):
 
         for seq in self.sequences:
             stride = stride_dict[seq]
+            # find the csv file
+            csv_file = os.path.join(self.data_path, seq, f"{self.split}_split.csv")
+            if os.path.exists(csv_file):
+                with open(csv_file, "r") as f:
+                    lines = f.readlines()[1:]  # Ignore the first line
+                    for line in lines:
+                        frame_index = line.strip().split(",")
+                        self.frame_indexes.append(
+                            (
+                                seq,
+                                int(frame_index[0]),
+                                (int(frame_index[1]) - int(frame_index[0])) // stride
+                                - 1,
+                                stride,
+                            )
+                        )
+
+        for seq, _, _, _ in self.frame_indexes:
             # find path to the video
             all_file = os.listdir(os.path.join(self.data_path, seq))
             for f in all_file:
@@ -102,23 +120,6 @@ class StereoMISDataset(Dataset):
                 raise FileNotFoundError(
                     f"No StereoCalibration.ini file found in {os.path.join(self.data_path, seq)}"
                 )
-
-            # find the csv file
-            csv_file = os.path.join(self.data_path, seq, f"{self.split}_split.csv")
-            if os.path.exists(csv_file):
-                with open(csv_file, "r") as f:
-                    lines = f.readlines()[1:]  # Ignore the first line
-                    for line in lines:
-                        frame_index = line.strip().split(",")
-                        self.frame_indexes.append(
-                            (
-                                seq,
-                                int(frame_index[0]),
-                                (int(frame_index[1]) - int(frame_index[0])) // stride
-                                - 1,
-                                stride,
-                            )
-                        )
 
     def load_pose(self):
         for seq in self.sequences:
