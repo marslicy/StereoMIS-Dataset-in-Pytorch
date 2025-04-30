@@ -6,7 +6,8 @@ Download the *StereoMIS* dataset from [here](https://zenodo.org/records/8154924)
 
 **Be sure the version is 0.0.1.**
 
-Without any preprocessing of the data, you can use the pytorch dataset provided by this repo directly.
+Theoretically, without any preprocessing of the data, you can use the pytorch dataset provided by this repo directly.
+BUT! No masks for P1 frame 16801 to 19140 are provided, but they claimed they use those for training. You may change it manually!
 
 ## Prepare the Python Environment
 

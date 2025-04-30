@@ -1,5 +1,4 @@
 import os
-import time
 
 import cv2
 import numpy as np
@@ -95,8 +94,7 @@ class StereoMISDataset(Dataset):
                             (
                                 seq,
                                 int(frame_index[0]),
-                                (int(frame_index[1]) - int(frame_index[0])) // stride
-                                - 1,
+                                (int(frame_index[1]) - int(frame_index[0])) // stride,
                                 stride,
                             )
                         )
@@ -158,13 +156,10 @@ class StereoMISDataset(Dataset):
         # Return the total number of samples in the dataset
         return sum(num_frames for _, _, num_frames, _ in self.frame_indexes)
 
-    def load_sample(self, seq, idx, video_path):
+    def load_sample(self, seq, idx):
         # load the video using VideoReader
-        time_start = time.time()
         vr = self.vr[seq]
         frame = vr[idx].asnumpy()
-        time_end = time.time()
-        print(f"Load video {video_path} frame {idx} time: {time_end - time_start:.4f}s")
 
         # upper side is the left frame, lower side is the right frame
         framel = frame[: frame.shape[0] // 2]
@@ -181,6 +176,8 @@ class StereoMISDataset(Dataset):
         # load mask
         mask_path = os.path.join(self.data_path, seq, f"masks/{idx:06d}l.png")
         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+        if mask is None:
+            raise FileNotFoundError(f"Mask file not found: {mask_path}")
         mask = cv2.resize(mask, self.size) if self.size is not None else mask
         mask = mask > 0
         mask = mask_specularities(framel, mask)
@@ -196,15 +193,14 @@ class StereoMISDataset(Dataset):
         for seq, start_frame, num_frames, stride in self.frame_indexes:
             if idx < num_frames:
                 # Load the video
-                video_path = self.video_paths[seq]
                 idx = start_frame // 2 * 2 + idx * stride + 1
                 break
             else:
                 idx -= num_frames
 
         # Load the sample
-        framel1, framer1, mask1 = self.load_sample(seq, idx, video_path)
-        framel2, framer2, mask2 = self.load_sample(seq, idx + stride, video_path)
+        framel1, framer1, mask1 = self.load_sample(seq, idx)
+        framel2, framer2, mask2 = self.load_sample(seq, idx + stride)
 
         pose1 = self.pose[seq][idx]
         pose2 = self.pose[seq][idx + stride]
@@ -276,6 +272,7 @@ if __name__ == "__main__":
         dataset, batch_size=2, shuffle=True, num_workers=0, drop_last=False
     )
     print(f"DataLoader size: {len(dataloader)}")
+    dataset[len(dataset) - 1]  # test the last sample
     # Iterate through the dataset
     for i, sample in enumerate(dataloader):
         print(f"Sample {i}:")
